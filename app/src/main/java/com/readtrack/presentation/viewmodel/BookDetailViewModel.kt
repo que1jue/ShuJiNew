@@ -399,28 +399,38 @@ class BookDetailViewModel @Inject constructor(
                         updatedAt = currentTime
                     )
                 } else {
-                    val fromPage = currentBook.currentPage
-                    val toPage = if (isIncrement) {
-                        (fromPage + amount).coerceAtMost(currentBook.totalPages)
-                    } else {
-                        amount.coerceIn(0.0, currentBook.totalPages)
-                    }
-                    val pagesActuallyRead = (toPage - fromPage).coerceAtLeast(0.0)
-
-                    record = ReadingRecordEntity(
-                        bookId = currentBook.id,
-                        bookSnapshot = BookSnapshot.from(currentBook, currentBook.status),
-                        pagesRead = pagesActuallyRead,
-                        fromPage = fromPage,
-                        toPage = toPage,
-                        date = currentTime
-                    )
-                    updatedBook = currentBook.copy(
-                        currentPage = toPage,
-                        lastReadAt = currentTime,
-                        updatedAt = currentTime
-                    )
-                }
+    val fromPage = currentBook.currentPage
+    val maxPage = currentBook.totalPages
+    val toPage = if (maxPage > 0) {
+        if (isIncrement) {
+            (fromPage + amount).coerceAtMost(maxPage)
+        } else {
+            amount.coerceIn(0.0, maxPage)
+        }
+    } else {
+        // 未设置总页数时不设上限，与章节分支逻辑一致
+        if (isIncrement) {
+            (fromPage + amount).coerceAtLeast(0.0)
+        } else {
+            amount.coerceAtLeast(0.0)
+        }
+    }
+    val pagesActuallyRead = (toPage - fromPage).coerceAtLeast(0.0)
+ 
+    record = ReadingRecordEntity(
+        bookId = currentBook.id,
+        bookSnapshot = BookSnapshot.from(currentBook, currentBook.status),
+        pagesRead = pagesActuallyRead,
+        fromPage = fromPage,
+        toPage = toPage,
+        date = currentTime
+    )
+    updatedBook = currentBook.copy(
+        currentPage = toPage,
+        lastReadAt = currentTime,
+        updatedAt = currentTime
+    )
+}
 
                 bookRepository.insertRecordAndUpdateBook(record, updatedBook)
                 WidgetUpdateHelper.triggerUpdate(context)
