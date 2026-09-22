@@ -451,3 +451,8 @@ class PreferencesManager @Inject constructor(
         }
     }
 }
+/** 将统计设置中的 StatsUnit 映射为书籍的 ProgressType */
+fun StatsUnit.toProgressType(): ProgressType = when (this) {
+    StatsUnit.CHAPTER -> ProgressType.CHAPTER
+    StatsUnit.PAGE    -> ProgressType.PAGE
+}
