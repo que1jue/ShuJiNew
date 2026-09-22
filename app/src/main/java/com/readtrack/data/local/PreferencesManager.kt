@@ -1,5 +1,6 @@
 package com.readtrack.data.local
 
+import com.readtrack.domain.model.ProgressType
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
