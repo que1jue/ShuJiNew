@@ -396,6 +396,34 @@ fun AddBookScreen(
             )
 
             // Progress Fields (auto-determined by settings)
+            // 进度类型选择（页数 / 章节数）
+Text(
+    "进度单位",
+    style = MaterialTheme.typography.titleMedium,
+    fontWeight = FontWeight.Bold
+)
+FlowRow(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp)
+) {
+    ProgressType.entries.forEach { type ->
+        FilterChip(
+            selected = uiState.progressType == type,
+            onClick = { viewModel.updateProgressType(type) },
+            label = {
+                Text(
+                    when (type) {
+                        ProgressType.PAGE    -> "页数"
+                        ProgressType.CHAPTER -> "章节数"
+                    },
+                    style = MaterialTheme.typography.labelMedium
+                )
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+}
             if (uiState.progressType == ProgressType.PAGE) {
                 // Page-based progress
                 OutlinedTextField(
