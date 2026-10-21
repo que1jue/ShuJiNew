@@ -1,0 +1,63 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: 构建并发布 Release APK
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 解码签名密钥
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > app/readtrack.keystore
+
+      - name: 授权 Gradle
+        run: |
+          chmod +x gradlew
+
+      - name: 构建 Release APK
+        env:
+          UMENG_APP_KEY: ${{ secrets.UMENG_APP_KEY }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --no-daemon 2>&1
+
+      - name: 获取版本号并重命名 APK
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          NEW_NAME="ShuJi-v${VERSION}-Release.apk"
+          cp "$APK_PATH" "app/build/outputs/apk/release/$NEW_NAME"
+          echo "版本号: $VERSION"
+          echo "新文件名: $NEW_NAME"
+          ls -lh "app/build/outputs/apk/release/$NEW_NAME"
+
+      - name: 检查 APK
+        run: |
+          ls -lh app/build/outputs/apk/release/
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/ShuJi-v*-Release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
