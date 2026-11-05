@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -322,21 +323,17 @@ private fun TypePreferenceBars(types: List<TypePreference>) {
             Text("类型偏好", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
 
-            val typeColor = mapOf(
-                "NOVEL" to Color(0xFF2196F3),   // FinishedBlue
-                "COMIC" to Color(0xFFFF9800),    // ReadingOrange
-                "AUDIOBOOK" to Color(0xFF4CAF50) // WantToReadGreen
-            )
-
             types.forEach { type ->
-                val color = typeColor[type.bookType] ?: Color(0xFF9E9E9E)
+                val color = typeColorFor(type.bookType)
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         type.typeLabel, style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.width(56.dp)
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.width(72.dp)
                     )
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         LinearProgressIndicator(
@@ -433,3 +430,29 @@ private fun SpeedCard(
         }
     }
 }
+
+/**
+ * 类型偏好的配色。
+ * 内置三种类型沿用原有配色；用户自定义类型按名称哈希从色板取色，
+ * 保证同一类型在多次渲染、排名变化时颜色保持稳定。
+ */
+private val BUILTIN_TYPE_COLORS = mapOf(
+    "小说" to Color(0xFF2196F3),   // FinishedBlue
+    "漫画" to Color(0xFFFF9800),   // ReadingOrange
+    "有声书" to Color(0xFF4CAF50)  // WantToReadGreen
+)
+
+private val TYPE_PALETTE = listOf(
+    Color(0xFF9C27B0), // 紫
+    Color(0xFFE91E63), // 粉
+    Color(0xFF00BCD4), // 青
+    Color(0xFF795548), // 棕
+    Color(0xFF607D8B), // 蓝灰
+    Color(0xFF3F51B5), // 靛蓝
+    Color(0xFF8BC34A), // 浅绿
+    Color(0xFFFF5722)  // 深橙
+)
+
+private fun typeColorFor(bookType: String): Color =
+    BUILTIN_TYPE_COLORS[bookType]
+        ?: TYPE_PALETTE[(bookType.hashCode() and 0x7FFFFFFF) % TYPE_PALETTE.size]

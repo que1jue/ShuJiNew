@@ -19,6 +19,7 @@ import com.readtrack.domain.model.BookExport
 import com.readtrack.domain.model.BookListExport
 import com.readtrack.domain.model.BookSnapshot
 import com.readtrack.domain.model.BookTagExport
+import com.readtrack.domain.model.BookTypeExport
 import com.readtrack.domain.model.DataBackup
 import com.readtrack.domain.model.ImportPreview
 import com.readtrack.domain.model.ImportResult
@@ -26,6 +27,7 @@ import com.readtrack.domain.model.ReadingRecordExport
 import com.readtrack.domain.model.TagExport
 import com.readtrack.domain.model.buildImportPreview
 import com.readtrack.domain.repository.BadgeRepository
+import com.readtrack.domain.repository.BookTypeRepository
 import com.readtrack.domain.repository.DataBackupRepository
 import com.readtrack.domain.repository.TagRepository
 import com.readtrack.util.CoverStorageUtil
@@ -45,7 +47,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** 当前备份格式版本，导入低版本时执行迁移 */
-private const val CURRENT_BACKUP_VERSION = 5
+private const val CURRENT_BACKUP_VERSION = 6
 
 @Singleton
 class DataBackupRepositoryImpl @Inject constructor(
@@ -58,6 +60,7 @@ class DataBackupRepositoryImpl @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val coverStorageUtil: CoverStorageUtil,
     private val tagRepository: TagRepository,
+    private val bookTypeRepository: BookTypeRepository,
     private val badgeDao: BadgeDao,
     private val badgeRepository: BadgeRepository
 ) : DataBackupRepository {
@@ -130,6 +133,17 @@ class DataBackupRepositoryImpl @Inject constructor(
             val preferences = preferencesManager.exportPreferences()
             val badgeExports = badgeDao.getAllBadges().first().map { BadgeExport(it.id, it.earnedAt) }
 
+            // 导出书籍类型（v6+）
+            val allTypes = bookTypeRepository.getAllBookTypesOnce()
+            val typeExports = allTypes.map { BookTypeExport(name = it.name, createdAt = it.createdAt) }
+            // 防御：书籍引用了类型表中不存在的名称时一并导出，避免导入后出现孤儿引用
+            val knownNames = allTypes.map { it.name }.toSet()
+            val orphanTypeExports = books
+                .map { it.bookType }
+                .filter { it.isNotBlank() && it !in knownNames }
+                .distinct()
+                .map { BookTypeExport(name = it, createdAt = 0L) }
+
             val backup = DataBackup(
                 books = bookExports,
                 readingRecords = records,
@@ -137,7 +151,8 @@ class DataBackupRepositoryImpl @Inject constructor(
                 preferences = preferences,
                 tags = tagExports,
                 bookTags = bookTagExports,
-                badges = badgeExports
+                badges = badgeExports,
+                bookTypes = typeExports + orphanTypeExports
             )
 
             Result.success(backup)
@@ -253,6 +268,18 @@ class DataBackupRepositoryImpl @Inject constructor(
             }
             val existingKeys = existingBooks.map { importIdentityKey(it) }.toSet()
 
+            // 阶段 1.5（v6+）：导入书籍类型。必须先于书籍导入，
+            // 否则书籍会带着类型名却在类型表中找不到对应行。
+            // 类型是字典型数据，即使 clearExisting 也不清空：
+            // 旧版本备份不含类型字段，清空会导致类型表被删空。
+            for (typeExport in migrated.bookTypes) {
+                try {
+                    bookTypeRepository.createBookType(typeExport.name)
+                } catch (e: Exception) {
+                    errors.add("导入书籍类型「${typeExport.name}」失败: ${e.message}")
+                }
+            }
+
             // 阶段 2：导入书籍
             migrated.books.forEach { bookExport ->
                 try {
@@ -292,6 +319,27 @@ class DataBackupRepositoryImpl @Inject constructor(
                     tagRepository.addTagToBook(tagId, bookId)
                 } catch (e: Exception) {
                     errors.add("导入书籍标签关联失败: ${e.message}")
+                }
+            }
+
+            // 阶段 2.6（v6+）：补齐书籍引用但类型表中缺失的类型。
+            // 旧备份（v5 及以下）不含 bookTypes 字段，导入后书籍仍带着类型名，
+            // 若不补建，添加书籍页的类型选择器里将找不到该类型。
+            val knownTypeNames = bookTypeRepository.getAllBookTypesOnce()
+                .map { it.name }
+                .toMutableSet()
+            val referencedTypeNames = migrated.books
+                .map { BookExport.normalizeLegacyBookType(it.bookType) }
+                .filter { it.isNotBlank() }
+                .distinct()
+            referencedTypeNames.forEach { name ->
+                if (name in knownTypeNames) return@forEach
+                try {
+                    if (bookTypeRepository.createBookType(name) > 0L) {
+                        knownTypeNames += name
+                    }
+                } catch (e: Exception) {
+                    errors.add("补建书籍类型「$name」失败: ${e.message}")
                 }
             }
 
@@ -554,7 +602,8 @@ class DataBackupRepositoryImpl @Inject constructor(
             preferences = backup.preferences,
             tags = backup.tags,
             bookTags = backup.bookTags,
-            badges = backup.badges
+            badges = backup.badges,
+            bookTypes = backup.bookTypes
         )
     }
 
@@ -597,6 +646,13 @@ class DataBackupRepositoryImpl @Inject constructor(
         }
         if (current.version < 5) {
             // v5: 添加 tags 和 bookTags 字段（使用默认值即可，标签可选）
+        }
+        if (current.version < 6) {
+            // v6: 添加 bookTypes 字段（书籍类型由固定枚举改为用户可自定义）。
+            // 旧备份不含该字段，bookTypes 走默认空列表；
+            // 书籍的 bookType 名称在 BookExport.toEntity() 中由枚举名归一化为中文名，
+            // 导入阶段 2.6 会扫描书籍实际引用的类型名并补建类型表中缺失的行，
+            // 避免书籍带着类型名却在选择器中找不到对应项。
         }
         // 确保版本号更新到当前版本，后续导入不再重复迁移
         if (current.version < CURRENT_BACKUP_VERSION) {

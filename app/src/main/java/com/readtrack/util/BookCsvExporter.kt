@@ -15,7 +15,7 @@ object BookCsvExporter {
             val title = escapeCsv(book.title)
             val author = escapeCsv(book.author ?: "")
             val status = statusLabel(book.status)
-            val type = book.bookType.displayName
+            val type = book.bookType
             val rating = if (book.rating != null && book.rating!! > 0) "${book.rating}" else "未评分"
             val totalStr = if (book.progressType == ProgressType.CHAPTER)
                 "共 ${book.totalChapters ?: 0} 章" else "共 ${book.totalPages.toInt()} 页"

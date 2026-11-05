@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.readtrack.data.local.dao.BadgeDao
 import com.readtrack.data.local.dao.BookDao
 import com.readtrack.data.local.dao.BookListDao
+import com.readtrack.data.local.dao.BookTypeDao
 import com.readtrack.data.local.dao.ReadingRecordDao
 import com.readtrack.data.local.dao.TagDao
 import com.readtrack.data.local.database.ReadTrackDatabase
@@ -14,6 +15,7 @@ import com.readtrack.data.local.PreferencesManager
 import com.readtrack.data.repository.BadgeRepositoryImpl
 import com.readtrack.data.repository.BookListRepositoryImpl
 import com.readtrack.data.repository.BookRepositoryImpl
+import com.readtrack.data.repository.BookTypeRepositoryImpl
 import com.readtrack.data.repository.DataBackupRepositoryImpl
 import com.readtrack.data.repository.ReadingRecordRepositoryImpl
 import com.readtrack.data.repository.TagRepositoryImpl
@@ -21,6 +23,7 @@ import com.readtrack.domain.badge.BadgeCheckScheduler
 import com.readtrack.domain.repository.BadgeRepository
 import com.readtrack.domain.repository.BookListRepository
 import com.readtrack.domain.repository.BookRepository
+import com.readtrack.domain.repository.BookTypeRepository
 import com.readtrack.domain.repository.DataBackupRepository
 import com.readtrack.domain.repository.ReadingRecordRepository
 import com.readtrack.domain.repository.TagRepository
@@ -44,7 +47,10 @@ object DatabaseModule {
             ReadTrackDatabase::class.java,
             "readtrack_database"
         )
-            .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+            .addMigrations(
+                MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+                MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15
+            )
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -110,6 +116,38 @@ object DatabaseModule {
         """)
     }
 
+    /**
+     * 从版本 14 迁移到 15：新增 book_types 表，书籍类型由固定枚举改为用户可自定义
+     *
+     * 关键点：
+     * 1. books.bookType 原本存枚举名（NOVEL/COMIC/AUDIOBOOK），需就地改写为中文显示名，
+     *    因为 BookEntity.bookType 的类型由 BookType 枚举改为 String
+     * 2. 三个内置类型作为普通行插入，createdAt 统一为 0，靠自增 id 保证展示顺序稳定
+     * 3. 索引名必须是 index_book_types_name，与 Room 依据实体定义生成的名称一致
+     */
+    private val MIGRATION_14_15 = Migration(14, 15) { db ->
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS book_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                name TEXT NOT NULL,
+                createdAt INTEGER NOT NULL
+            )
+        """)
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_book_types_name ON book_types(name)")
+
+        // 按固定顺序插入内置类型（小说、漫画、有声书）
+        db.execSQL("INSERT OR IGNORE INTO book_types (name, createdAt) VALUES ('小说', 0)")
+        db.execSQL("INSERT OR IGNORE INTO book_types (name, createdAt) VALUES ('漫画', 0)")
+        db.execSQL("INSERT OR IGNORE INTO book_types (name, createdAt) VALUES ('有声书', 0)")
+
+        // 把 books.bookType 从枚举名改写为中文名
+        db.execSQL("UPDATE books SET bookType = '小说' WHERE bookType = 'NOVEL'")
+        db.execSQL("UPDATE books SET bookType = '漫画' WHERE bookType = 'COMIC'")
+        db.execSQL("UPDATE books SET bookType = '有声书' WHERE bookType = 'AUDIOBOOK'")
+        // 兜底：历史脏数据统一归到"小说"，避免出现指向不存在类型的孤儿值
+        db.execSQL("UPDATE books SET bookType = '小说' WHERE bookType NOT IN (SELECT name FROM book_types)")
+    }
+
     @Provides
     @Singleton
     fun provideBookDao(database: ReadTrackDatabase): BookDao {
@@ -138,6 +176,12 @@ object DatabaseModule {
     @Singleton
     fun provideBadgeDao(database: ReadTrackDatabase): BadgeDao {
         return database.badgeDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBookTypeDao(database: ReadTrackDatabase): BookTypeDao {
+        return database.bookTypeDao()
     }
 
     @Provides
@@ -178,6 +222,15 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideBookTypeRepository(
+        bookTypeDao: BookTypeDao,
+        database: ReadTrackDatabase
+    ): BookTypeRepository {
+        return BookTypeRepositoryImpl(bookTypeDao, database)
+    }
+
+    @Provides
+    @Singleton
     fun provideBadgeRepository(
         badgeDao: BadgeDao,
         bookDao: BookDao,
@@ -198,6 +251,7 @@ object DatabaseModule {
         preferencesManager: PreferencesManager,
         coverStorageUtil: CoverStorageUtil,
         tagRepository: TagRepository,
+        bookTypeRepository: BookTypeRepository,
         badgeDao: BadgeDao,
         badgeRepository: BadgeRepository
     ): DataBackupRepository {
@@ -211,6 +265,7 @@ object DatabaseModule {
             preferencesManager = preferencesManager,
             coverStorageUtil = coverStorageUtil,
             tagRepository = tagRepository,
+            bookTypeRepository = bookTypeRepository,
             badgeDao = badgeDao,
             badgeRepository = badgeRepository
         )

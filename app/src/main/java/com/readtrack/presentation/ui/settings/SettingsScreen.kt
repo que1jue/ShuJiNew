@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Cookie
 import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.CloudUpload
@@ -111,6 +112,7 @@ fun SettingsScreen(
     var showUpdateSourceDialog by remember { mutableStateOf(false) }
     var showUpdateResultDialog by remember { mutableStateOf(false) }
     var showTagSheet by remember { mutableStateOf(false) }
+    var showTypeSheet by remember { mutableStateOf(false) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingImportContent by remember { mutableStateOf<String?>(null) }
 
@@ -528,6 +530,11 @@ fun SettingsScreen(
                         Icons.Outlined.CloudUpload, "标签管理",
                         "创建、删除书籍标签"
                     ) { showTagSheet = true }
+                    SettingsItemDivider()
+                    SettingsItem(
+                        Icons.Outlined.Category, "类型管理",
+                        "创建、重命名、删除书籍类型"
+                    ) { showTypeSheet = true }
                 }
             }
 
@@ -728,6 +735,11 @@ fun SettingsScreen(
     if (showTagSheet) {
         val tagVm: com.readtrack.presentation.viewmodel.TagManagementViewModel = hiltViewModel()
         TagManagementSheet(onDismiss = { showTagSheet = false }, viewModel = tagVm)
+    }
+
+    if (showTypeSheet) {
+        val typeVm: com.readtrack.presentation.viewmodel.BookTypeManagementViewModel = hiltViewModel()
+        BookTypeManagementSheet(onDismiss = { showTypeSheet = false }, viewModel = typeVm)
     }
 
     LaunchedEffect(uiState.updateResult) {

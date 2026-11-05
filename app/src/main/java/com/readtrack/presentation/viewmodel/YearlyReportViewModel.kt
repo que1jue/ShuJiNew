@@ -135,7 +135,7 @@ class YearlyReportViewModel @Inject constructor(
             .maxByOrNull { (it.lastReadAt ?: 0L) - it.createdAt }
 
         val genreCounts = yearBooks.groupBy { it.bookType }
-        val topGenre = genreCounts.maxByOrNull { it.value.size }?.key?.displayName ?: "未知"
+        val topGenre = genreCounts.maxByOrNull { it.value.size }?.key?.takeIf { it.isNotBlank() } ?: "未知"
 
         val maxStreakDays = if (streakDates.isNotEmpty()) {
             calculateMaxStreak(streakDates)

@@ -9,6 +9,7 @@ import com.readtrack.data.local.entity.BookEntity
 import com.readtrack.data.local.entity.ReadingRecordEntity
 import com.readtrack.data.local.entity.RecordType
 import com.readtrack.data.local.entity.TagEntity
+import com.readtrack.data.local.entity.BookTypeEntity
 import androidx.room.withTransaction
 import com.readtrack.data.remote.BingImageResult
 import com.readtrack.data.remote.BingImageSearchService
@@ -16,9 +17,10 @@ import com.readtrack.data.remote.BookSearchResult
 import com.readtrack.data.remote.DoubanSearchService
 import com.readtrack.domain.model.BookSnapshot
 import com.readtrack.domain.model.BookStatus
-import com.readtrack.domain.model.BookType
+import com.readtrack.domain.model.BookTypes
 import com.readtrack.domain.model.ProgressType
 import com.readtrack.domain.repository.BookRepository
+import com.readtrack.domain.repository.BookTypeRepository
 import com.readtrack.domain.repository.TagRepository
 import com.readtrack.util.CoverStorageUtil
 import com.readtrack.util.PerformanceTrace
@@ -45,7 +47,7 @@ data class AddBookUiState(
     val currentChapter: String = "",
     val description: String = "",
     val coverUri: String? = null,
-    val bookType: BookType = BookType.NOVEL,
+    val bookType: String = BookTypes.DEFAULT,
     val status: BookStatus = BookStatus.WANT_TO_READ,
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
@@ -70,13 +72,16 @@ data class AddBookUiState(
     val selectedImageUrl: String? = null,  // 长按预览时用的 URL
     // 标签相关
     val selectedTagIds: Set<Long> = emptySet(),
-    val allTags: List<TagEntity> = emptyList()
+    val allTags: List<TagEntity> = emptyList(),
+    // 书籍类型（用户可自定义）
+    val allBookTypes: List<BookTypeEntity> = emptyList()
 )
 
 @HiltViewModel
 class AddBookViewModel @Inject constructor(
     private val bookRepository: BookRepository,
     private val tagRepository: TagRepository,
+    private val bookTypeRepository: BookTypeRepository,
     private val database: ReadTrackDatabase,
     private val doubanSearchService: DoubanSearchService,
     private val bingImageSearchService: BingImageSearchService,
@@ -109,6 +114,22 @@ class AddBookViewModel @Inject constructor(
         viewModelScope.launch {
             tagRepository.getAllTags().collect { tags ->
                 _uiState.update { it.copy(allTags = tags) }
+            }
+        }
+        // 加载所有书籍类型；仅当类型表为空时补建内置类型
+        viewModelScope.launch {
+            bookTypeRepository.ensureDefaultsExist()
+            bookTypeRepository.getAllBookTypes().collect { types ->
+                _uiState.update { state ->
+                    // 编辑态：bookType 由 loadBook 依据书籍数据设置，此处不得改写，
+                    // 否则类型表变化触发重新发射时会把用户正在编辑的书籍类型静默重置
+                    val resolvedType = when {
+                        state.isEditing -> state.bookType
+                        types.any { it.name == state.bookType } -> state.bookType
+                        else -> types.firstOrNull()?.name ?: BookTypes.DEFAULT
+                    }
+                    state.copy(allBookTypes = types, bookType = resolvedType)
+                }
             }
         }
     }
@@ -161,7 +182,7 @@ class AddBookViewModel @Inject constructor(
     fun updateDescription(description: String) = _uiState.update { it.copy(description = description) }
     fun updateCoverUri(uri: String?) = _uiState.update { it.copy(coverUri = uri) }
     fun updateStatus(status: BookStatus) = _uiState.update { it.copy(status = status) }
-    fun updateBookType(bookType: BookType) = _uiState.update { it.copy(bookType = bookType) }
+    fun updateBookType(bookType: String) = _uiState.update { it.copy(bookType = bookType) }
 
     fun toggleTag(tagId: Long) {
         _uiState.update { state ->
@@ -180,6 +201,25 @@ class AddBookViewModel @Inject constructor(
             state.copy(selectedTagIds = state.selectedTagIds + tagId)
         }
         return tagId
+    }
+
+    /**
+     * 创建新的书籍类型并选中。
+     * 名称为空或非法时返回 null；重名时不新建，但仍会选中已有同名类型。
+     */
+    suspend fun createBookTypeAndSelect(name: String): String? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+
+        _uiState.value.allBookTypes.find { it.name == trimmed }?.let { existing ->
+            _uiState.update { state -> state.copy(bookType = existing.name) }
+            return existing.name
+        }
+
+        val id = bookTypeRepository.createBookType(trimmed)
+        if (id <= 0L) return null
+        _uiState.update { state -> state.copy(bookType = trimmed) }
+        return trimmed
     }
 
     fun showSearchDialog() {

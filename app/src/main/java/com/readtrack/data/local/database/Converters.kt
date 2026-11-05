@@ -4,7 +4,6 @@ import androidx.room.TypeConverter
 import com.readtrack.data.local.entity.RecordType
 import com.readtrack.domain.model.BookSnapshot
 import com.readtrack.domain.model.BookStatus
-import com.readtrack.domain.model.BookType
 import com.readtrack.domain.model.ProgressType
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -74,21 +73,6 @@ class Converters {
         } catch (e: Exception) {
             android.util.Log.w("Converters", "未知 RecordType '$value'，回退到 NORMAL")
             RecordType.NORMAL
-        }
-    }
-
-    @TypeConverter
-    fun fromBookType(bookType: BookType): String {
-        return bookType.name
-    }
-
-    @TypeConverter
-    fun toBookType(value: String): BookType {
-        return try {
-            BookType.valueOf(value)
-        } catch (e: Exception) {
-            android.util.Log.w("Converters", "未知 BookType '$value'，回退到 NOVEL")
-            BookType.NOVEL
         }
     }
 }

@@ -137,7 +137,7 @@ fun BookCard(
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                     ) {
                         Text(
-                            text = book.bookType.displayName,
+                            text = book.bookType,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

@@ -5,7 +5,6 @@ import com.readtrack.data.local.entity.ReadingRecordEntity
 import com.readtrack.data.local.entity.RecordType
 import com.readtrack.domain.model.BadgeCatalog
 import com.readtrack.domain.model.BookStatus
-import com.readtrack.domain.model.BookType
 import com.readtrack.domain.model.ProgressType
 import com.readtrack.util.getStartOfDay
 import java.util.Calendar
@@ -78,6 +77,12 @@ data class BadgeCheckSnapshot(
 }
 
 private const val DAY_MS = 24L * 60L * 60L * 1000L
+
+/**
+ * "博览群书"徽章所需的书籍类型数量。
+ * 类型改为用户可自定义后不能再用枚举总数（会随用户建类型而变化），固定为 3 种。
+ */
+private const val DIVERSE_READER_THRESHOLD = 3
 
 private fun countHourRange(records: List<ReadingRecordEntity>, startHourInclusive: Int, endHourExclusive: Int): Int {
     val cal = Calendar.getInstance()
@@ -174,7 +179,7 @@ fun evaluateBadges(snapshot: BadgeCheckSnapshot): Set<String> {
 
     // 特殊
     if (snapshot.fiveStarCount >= 5) awarded += "five_star"
-    if (snapshot.distinctBookTypes >= BookType.entries.size) awarded += "diverse_reader"
+    if (snapshot.distinctBookTypes >= DIVERSE_READER_THRESHOLD) awarded += "diverse_reader"
     if (snapshot.maxFinishedInWeek >= 3) awarded += "weekly_sprint"
 
     return awarded

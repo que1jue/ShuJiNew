@@ -80,6 +80,7 @@ fun AddBookScreen(
     var urlInput by remember { mutableStateOf("") }
     var urlError by remember { mutableStateOf<String?>(null) }
     var showCreateTagDialog by remember { mutableStateOf(false) }
+    var showCreateTypeDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     // 使用 rememberSaveable 追踪是否已经初始化过，避免从封面选择器返回时重置状态
@@ -472,14 +473,25 @@ fun AddBookScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                com.readtrack.domain.model.BookType.entries.forEach { type ->
+                uiState.allBookTypes.forEach { type ->
                     FilterChip(
-                        selected = uiState.bookType == type,
-                        onClick = { viewModel.updateBookType(type) },
-                        label = { Text(type.displayName, style = MaterialTheme.typography.labelMedium) },
+                        selected = uiState.bookType == type.name,
+                        onClick = { viewModel.updateBookType(type.name) },
+                        label = { Text(type.name, style = MaterialTheme.typography.labelMedium) },
                         shape = RoundedCornerShape(12.dp)
                     )
                 }
+                // 新建类型按钮
+                FilterChip(
+                    selected = false,
+                    onClick = { showCreateTypeDialog = true },
+                    label = { Text("+ 新建类型", style = MaterialTheme.typography.labelMedium) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                )
             }
 
             // Tag Selection
@@ -648,6 +660,20 @@ fun AddBookScreen(
                 scope.launch {
                     viewModel.createTagAndSelect(tagName)
                     showCreateTagDialog = false
+                }
+            }
+        )
+    }
+
+    // 创建书籍类型弹窗
+    if (showCreateTypeDialog) {
+        CreateBookTypeDialog(
+            existingNames = uiState.allBookTypes.map { it.name },
+            onDismiss = { showCreateTypeDialog = false },
+            onConfirm = { typeName ->
+                scope.launch {
+                    viewModel.createBookTypeAndSelect(typeName)
+                    showCreateTypeDialog = false
                 }
             }
         )
@@ -1144,6 +1170,57 @@ private fun CreateTagDialog(
             TextButton(
                 onClick = { onConfirm(tagName.trim()) },
                 enabled = tagName.isNotBlank()
+            ) {
+                Text("创建")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CreateBookTypeDialog(
+    existingNames: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var typeName by remember { mutableStateOf("") }
+    val trimmed = typeName.trim()
+    val isDuplicate = trimmed.isNotEmpty() && existingNames.any { it == trimmed }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("创建书籍类型", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = typeName,
+                    onValueChange = { typeName = it },
+                    label = { Text("类型名称") },
+                    placeholder = { Text("如：技术书、绘本、杂志") },
+                    singleLine = true,
+                    isError = isDuplicate,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (isDuplicate) {
+                    Text(
+                        "该类型已存在",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmed) },
+                enabled = trimmed.isNotEmpty() && !isDuplicate
             ) {
                 Text("创建")
             }

@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.readtrack.data.local.entity.BookEntity
 import com.readtrack.data.local.entity.ReadingRecordEntity
 import com.readtrack.data.local.entity.RecordType
-import com.readtrack.domain.model.BookType
+import com.readtrack.domain.model.BookTypes
 import com.readtrack.domain.model.DayOfWeekActivity
 import com.readtrack.domain.model.ProgressType
 import com.readtrack.domain.model.HabitDashboardData
@@ -161,8 +161,8 @@ class HabitDashboardViewModel @Inject constructor(
 
         records.forEach { record ->
             val bookType = record.bookSnapshot?.bookType
-                ?: record.bookId?.let { booksMap[it]?.bookType?.name }
-                ?: BookType.NOVEL.name
+                ?: record.bookId?.let { booksMap[it]?.bookType }
+                ?: BookTypes.DEFAULT
             val isChapter = record.bookSnapshot?.progressType == ProgressType.CHAPTER
             val amount = if (isChapter) (record.chaptersRead ?: 0).toDouble() else record.pagesRead
             pagesByType[bookType] = (pagesByType[bookType] ?: 0.0) + amount
@@ -171,14 +171,13 @@ class HabitDashboardViewModel @Inject constructor(
         }
 
         val totalPages = pagesByType.values.sum().coerceAtLeast(1.0)
-        val typeLabelMap = mapOf("NOVEL" to "小说", "COMIC" to "漫画", "AUDIOBOOK" to "有声书")
 
         return pagesByType.entries
             .sortedByDescending { it.value }
             .map { (type, pages) ->
                 TypePreference(
                     bookType = type,
-                    typeLabel = typeLabelMap[type] ?: type,
+                    typeLabel = type,
                     pagesRead = pages,
                     percentage = (pages / totalPages).toFloat(),
                     bookCount = bookIdsByType[type]?.size ?: 0

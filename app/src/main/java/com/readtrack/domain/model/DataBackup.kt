@@ -56,7 +56,7 @@ data class PreferencesExport(
  */
 @Serializable
 data class DataBackup(
-    val version: Int = 5,
+    val version: Int = 6,
     val exportTime: Long = System.currentTimeMillis(),
     val appVersion: String = BuildConfig.VERSION_NAME,
     val books: List<BookExport> = emptyList(),
@@ -68,7 +68,22 @@ data class DataBackup(
     /** 书籍-标签关联（v5+），tagId 为标签名，bookId 为书籍导入标识键 */
     val bookTags: List<BookTagExport> = emptyList(),
     /** 已获得的徽章（v6+），清空导入时保留用户成就 */
-    val badges: List<BadgeExport> = emptyList()
+    val badges: List<BadgeExport> = emptyList(),
+    /**
+     * 书籍类型列表（v6+）。
+     * 类型改为用户可自定义后必须随备份迁移，否则在空设备导入后，
+     * 书籍会带着「技术书」这类类型名，但类型表里没有对应行，选择器里找不到。
+     */
+    val bookTypes: List<BookTypeExport> = emptyList()
+)
+
+/**
+ * 书籍类型导出模型（v6+）
+ */
+@Serializable
+data class BookTypeExport(
+    val name: String,
+    val createdAt: Long = 0L
 )
 
 /**
@@ -117,7 +132,7 @@ data class BookExport(
     val coverPath: String? = null,
     val description: String? = null,
     val status: String,
-    val bookType: String = "NOVEL",
+    val bookType: String = BookTypes.DEFAULT,
     val rating: Float? = null,
     val createdAt: Long,
     val updatedAt: Long,
@@ -137,11 +152,26 @@ data class BookExport(
             coverPath = book.coverPath,
             description = book.description,
             status = book.status.name,
-            bookType = book.bookType.name,
+            bookType = book.bookType,
             rating = book.rating,
             createdAt = book.createdAt,
             updatedAt = book.updatedAt,
             lastReadAt = book.lastReadAt
+        )
+
+        /**
+         * 旧备份中 bookType 存的是枚举名，导入时转换为当前使用的中文类型名。
+         * 公开以便导入流程在补建类型表时复用，无需经由 toEntity()（后者对非法 status 会抛异常）。
+         */
+        fun normalizeLegacyBookType(raw: String): String {
+            if (raw.isBlank()) return BookTypes.DEFAULT
+            return LEGACY_TYPE_NAMES[raw] ?: raw
+        }
+
+        private val LEGACY_TYPE_NAMES = mapOf(
+            "NOVEL" to "小说",
+            "COMIC" to "漫画",
+            "AUDIOBOOK" to "有声书"
         )
     }
 
@@ -160,7 +190,7 @@ data class BookExport(
         coverPath = coverPath,
         description = description,
         status = BookStatus.valueOf(status),
-        bookType = try { BookType.valueOf(bookType) } catch (e: Exception) { BookType.NOVEL },
+        bookType = normalizeLegacyBookType(bookType),
         rating = rating,
         createdAt = createdAt,
         updatedAt = updatedAt,    // 保留原始时间，不覆盖

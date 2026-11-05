@@ -233,7 +233,7 @@ object BadgeCatalog {
         Badge("diverse_reader", BadgeCategory.SPECIAL, BadgeTier.SILVER,
             icon = "🎭",
             title = "博览群书",
-            description = "读过全部 3 种类型（小说、漫画、有声书），阅读口味不设限",
+            description = "读过 3 种不同类型的书籍，阅读口味不设限",
             threshold = 3, progressKey = PROGRESS_DIVERSE, unit = "种",
             quote = "不定义自己，不局限视野。这才是真正的阅读者"),
         Badge("weekly_sprint", BadgeCategory.SPECIAL, BadgeTier.GOLD,

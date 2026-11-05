@@ -675,7 +675,7 @@ private fun BookInfoCard(book: BookEntity) {
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                     ) {
                         Text(
-                            book.bookType.displayName,
+                            book.bookType,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
