@@ -98,8 +98,6 @@ fun SettingsScreen(
     onNavigateToBackupSettings: () -> Unit,
     onNavigateToWidgetSettings: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
-    onNavigateToDonate: () -> Unit = {},
-    onNavigateToFeedback: () -> Unit = {},
     onNavigateToBadges: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -109,7 +107,6 @@ fun SettingsScreen(
     var showStatsUnitDialog by remember { mutableStateOf(false) }
     var showWebDavConfigDialog by remember { mutableStateOf(false) }
     var showAutoBackupDialog by remember { mutableStateOf(false) }
-    var showUpdateSourceDialog by remember { mutableStateOf(false) }
     var showUpdateResultDialog by remember { mutableStateOf(false) }
     var showTagSheet by remember { mutableStateOf(false) }
     var showTypeSheet by remember { mutableStateOf(false) }
@@ -540,22 +537,12 @@ fun SettingsScreen(
 
             // 关于
             item {
-                val updateSubtitle = if (uiState.isCheckingUpdate) "正在检查..." else "当前版本 ${BuildConfig.VERSION_NAME}（${if (uiState.updateSource == "gitee") "Gitee" else "GitHub"}）"
+                val updateSubtitle = if (uiState.isCheckingUpdate) "正在检查..." else "当前版本 ${BuildConfig.VERSION_NAME}"
                 SettingsGroup("关于") {
                     SettingsItem(
                         Icons.Outlined.Download, "检查更新",
                         updateSubtitle
                     ) { viewModel.checkForUpdate() }
-                    SettingsItemDivider()
-                    SettingsItem(
-                        Icons.Outlined.Favorite, "捐赠支持",
-                        "如果你喜欢书迹，欢迎请开发者喝杯咖啡"
-                    ) { onNavigateToDonate() }
-                    SettingsItemDivider()
-                    SettingsItem(
-                        Icons.Outlined.Feedback, "问题建议 / 反馈",
-                        "遇到问题或想提建议？随时告诉我"
-                    ) { onNavigateToFeedback() }
                     SettingsItemDivider()
                     SettingsItem(
                         Icons.Outlined.Info, "关于",
@@ -697,41 +684,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showUpdateSourceDialog) {
-        AlertDialog(
-            onDismissRequest = { showUpdateSourceDialog = false },
-            title = { Text("切换更新源") },
-            text = {
-                Column {
-                    listOf("github" to "GitHub", "gitee" to "Gitee").forEach { (value, label) ->
-                        val isSelected = uiState.updateSource == value
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.setUpdateSource(value)
-                                    showUpdateSourceDialog = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = {
-                                    viewModel.setUpdateSource(value)
-                                    showUpdateSourceDialog = false
-                                }
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(label)
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showUpdateSourceDialog = false }) { Text("关闭") } }
-        )
-    }
-
     if (showTagSheet) {
         val tagVm: com.readtrack.presentation.viewmodel.TagManagementViewModel = hiltViewModel()
         TagManagementSheet(onDismiss = { showTagSheet = false }, viewModel = tagVm)
@@ -761,10 +713,6 @@ fun SettingsScreen(
                 context.startActivity(intent)
                 showUpdateResultDialog = false
                 viewModel.clearUpdateResult()
-            },
-            onSwitchSource = {
-                showUpdateResultDialog = false
-                showUpdateSourceDialog = true
             }
         )
     }
@@ -791,8 +739,7 @@ private fun cleanMarkdown(text: String): String {
 fun UpdateDialog(
     result: com.readtrack.remote.UpdateResult,
     onDismiss: () -> Unit,
-    onOpenDownload: () -> Unit,
-    onSwitchSource: () -> Unit = {}
+    onOpenDownload: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -837,14 +784,9 @@ fun UpdateDialog(
             }
         },
         dismissButton = {
-            Row {
-                TextButton(onClick = onSwitchSource) {
-                    Text("切换源")
-                }
-                if (result.hasUpdate) {
-                    TextButton(onClick = onDismiss) {
-                        Text("稍后再说")
-                    }
+            if (result.hasUpdate) {
+                TextButton(onClick = onDismiss) {
+                    Text("稍后再说")
                 }
             }
         }

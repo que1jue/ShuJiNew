@@ -1060,19 +1060,13 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(showProgressDialog = false, progressMessage = "", progressPercent = 0f) }
     }
 
-    fun setUpdateSource(source: String) {
-        viewModelScope.launch {
-            preferencesManager.setUpdateSource(source)
-        }
-    }
-
     fun checkForUpdate() {
         android.util.Log.i("ReadTrack", "checkForUpdate() 被调用")
         _uiState.update { it.copy(isCheckingUpdate = true, updateResult = null) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                android.util.Log.i("ReadTrack", "开始请求更新 API, source=${_uiState.value.updateSource}")
-                val result = UpdateChecker.checkForUpdate(okHttpClient, _uiState.value.updateSource)
+                android.util.Log.i("ReadTrack", "开始请求 GitHub 更新 API")
+                val result = UpdateChecker.checkForUpdate(okHttpClient)
                 android.util.Log.i("ReadTrack", "更新检查完成: hasUpdate=${result.hasUpdate}, latest=${result.latestVersion}")
                 withContext(Dispatchers.Main) {
                     _uiState.update { it.copy(isCheckingUpdate = false, updateResult = result) }

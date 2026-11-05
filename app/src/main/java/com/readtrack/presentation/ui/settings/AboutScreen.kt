@@ -138,9 +138,9 @@ fun AboutScreen(
                 SettingsClickableCard(
                     icon = Icons.Outlined.OpenInBrowser,
                     title = "GitHub",
-                    subtitle = "github.com/Mo-SeTian/ShuJiNew"
+                    subtitle = "github.com/que1jue/ShuJiNew"
                 ) {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Mo-SeTian/ShuJiNew"))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/que1jue/ShuJiNew"))
                     context.startActivity(intent)
                 }
             }

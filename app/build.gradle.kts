@@ -19,15 +19,15 @@ val localProperties = Properties().apply {
 
 android {
     namespace = "com.readtrack"
-    compileSdk = 37
+    compileSdk = 36
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.readtrack"
         minSdk = 34
         targetSdk = 37
-        versionCode = 33
-        versionName = "2.7.0"
+        versionCode = 36
+        versionName = "2.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

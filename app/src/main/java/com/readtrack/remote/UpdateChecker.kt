@@ -7,20 +7,15 @@ import okhttp3.Request
 
 object UpdateChecker {
 
-    private const val GITHUB_API = "https://api.github.com/repos/Mo-SeTian/ShuJiNew/releases/latest"
-    private const val GITEE_API = "https://gitee.com/api/v5/repos/mosetian/ShuJiNew/releases/latest"
+    // 更新检查指向你自己的仓库
+    private const val GITHUB_OWNER = "que1jue"
+    private const val GITHUB_REPO = "ShuJiNew"
+
+    private const val GITHUB_API = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun checkForUpdate(
-        client: OkHttpClient,
-        source: String // "github" or "gitee"
-    ): UpdateResult {
-        return when (source) {
-            "gitee" -> checkGitee(client)
-            else -> checkGitHub(client)
-        }
-    }
+    fun checkForUpdate(client: OkHttpClient): UpdateResult = checkGitHub(client)
 
     private fun checkGitHub(client: OkHttpClient): UpdateResult {
         val request = Request.Builder()
@@ -46,36 +41,6 @@ object UpdateChecker {
                 releaseNotes = release.body ?: "",
                 downloadUrl = downloadUrl,
                 releasePageUrl = release.htmlUrl
-            )
-        }
-    }
-
-    private fun checkGitee(client: OkHttpClient): UpdateResult {
-        val request = Request.Builder()
-            .url(GITEE_API)
-            .header("Accept", "application/json")
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw RuntimeException("Gitee API 请求失败: ${response.code}")
-
-            val release = json.decodeFromString(GiteeRelease.serializer(), body)
-            val tagVersion = release.tagName.removePrefix("v")
-            val hasUpdate = compareVersions(tagVersion, BuildConfig.VERSION_NAME) > 0
-
-            val downloadUrl = release.attachFiles.firstOrNull { it.name.endsWith(".apk") }?.downloadUrl
-                ?: release.assets.firstOrNull { it.name.endsWith(".apk") }?.downloadUrl
-                ?: release.htmlUrl
-                ?: "https://gitee.com/mosetian/ShuJiNew/releases"
-
-            return UpdateResult(
-                hasUpdate = hasUpdate,
-                latestVersion = tagVersion,
-                currentVersion = BuildConfig.VERSION_NAME,
-                releaseNotes = release.body ?: "",
-                downloadUrl = downloadUrl,
-                releasePageUrl = release.htmlUrl ?: "https://gitee.com/mosetian/ShuJiNew/releases"
             )
         }
     }
