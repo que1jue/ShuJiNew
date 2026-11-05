@@ -6,14 +6,13 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.x-blue)](https://kotlinlang.org/)
 [![Compose](https://img.shields.io/badge/Compose-Material%203-orange)](https://developer.android.com/compose)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.9.0-blue)](https://github.com/Mo-SeTian/ShuJiNew/releases)
+[![Version](https://img.shields.io/badge/Version-2.9.0-blue)](https://github.com/que1jue/ShuJiNew/releases)
 
 ## 下载
 
 | 渠道 | 地址 |
 |------|------|
-| GitHub Releases | [最新版本](https://github.com/Mo-SeTian/ShuJiNew/releases/latest) |
-| Gitee Releases（国内镜像） | [最新版本](https://gitee.com/mosetian/ShuJiNew/releases) |
+| GitHub Releases | [最新版本](https://github.com/que1jue/ShuJiNew/releases/latest) |
 
 ## 功能特性
 
@@ -84,7 +83,7 @@
 
 ### 应用更新
 - 应用内检测新版本
-- 支持 GitHub / Gitee 更新源切换，离线可切换
+- 从 GitHub 检查最新版本
 
 ### 隐私保护
 - 使用友盟统计，仅收集匿名活跃数据
@@ -145,14 +144,7 @@ app/src/main/java/com/readtrack/
 
 ## 构建
 
-```bash
-git clone https://github.com/Mo-SeTian/ShuJiNew.git
+```
+git clone https://github.com/que1jue/ShuJiNew.git
 cd ShuJiNew
 ./gradlew assembleRelease
-```
-
-APK 输出：`app/build/outputs/apk/release/app-release.apk`
-
-## 许可证
-
-MIT License
