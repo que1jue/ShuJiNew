@@ -32,12 +32,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
+import com.readtrack.data.local.entity.BookTypeEntity
 import com.readtrack.data.remote.BingImageResult
 import com.readtrack.presentation.ui.components.BookCover
 import com.readtrack.presentation.ui.components.BookCoverQuality
@@ -81,6 +84,11 @@ fun AddBookScreen(
     var urlError by remember { mutableStateOf<String?>(null) }
     var showCreateTagDialog by remember { mutableStateOf(false) }
     var showCreateTypeDialog by remember { mutableStateOf(false) }
+    // 长按类型后的管理弹窗
+    var typeToManage by remember { mutableStateOf<BookTypeEntity?>(null) }
+    /** 受影响的书籍数；null 表示仍在加载，此时不展示数字以免误导删除决策 */
+    var typeAffectedCount by remember { mutableStateOf<Int?>(null) }
+    var typeManageError by remember { mutableStateOf<String?>(null) }
     val focusManager = LocalFocusManager.current
 
     // 使用 rememberSaveable 追踪是否已经初始化过，避免从封面选择器返回时重置状态
@@ -474,25 +482,44 @@ fun AddBookScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 uiState.allBookTypes.forEach { type ->
-                    FilterChip(
-                        selected = uiState.bookType == type.name,
+                    val isSelected = uiState.bookType == type.name
+                    BookTypeChip(
+                        text = type.name,
+                        containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        labelColor = if (isSelected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         onClick = { viewModel.updateBookType(type.name) },
-                        label = { Text(type.name, style = MaterialTheme.typography.labelMedium) },
-                        shape = RoundedCornerShape(12.dp)
+                        onLongClick = {
+                            typeToManage = type
+                            typeManageError = null
+                            typeAffectedCount = null
+                            scope.launch {
+                                typeAffectedCount = viewModel.countBooksWithType(type.name)
+                            }
+                        }
                     )
                 }
-                // 新建类型按钮
-                FilterChip(
-                    selected = false,
-                    onClick = { showCreateTypeDialog = true },
-                    label = { Text("+ 新建类型", style = MaterialTheme.typography.labelMedium) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                // 新建类型按钮：复用 BookTypeChip，保证与类型项高度、内边距完全一致
+                BookTypeChip(
+                    text = "+ 新建类型",
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    labelColor = MaterialTheme.colorScheme.primary,
+                    onClick = { showCreateTypeDialog = true }
                 )
             }
+
+            Text(
+                "长按类型可重命名或删除，改名后已使用该类型的书籍会同步更新",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             // Tag Selection
             Text(
@@ -674,6 +701,43 @@ fun AddBookScreen(
                 scope.launch {
                     viewModel.createBookTypeAndSelect(typeName)
                     showCreateTypeDialog = false
+                }
+            }
+        )
+    }
+
+    // 长按类型后的管理弹窗（重命名 / 删除）
+    typeToManage?.let { type ->
+        BookTypeManageDialog(
+            type = type,
+            affectedCount = typeAffectedCount,
+            isLastType = uiState.allBookTypes.size <= 1,
+            existingNames = uiState.allBookTypes.map { it.name },
+            errorMessage = typeManageError,
+            onDismiss = {
+                typeToManage = null
+                typeManageError = null
+            },
+            onRename = { newName ->
+                scope.launch {
+                    val ok = viewModel.renameBookType(type.id, newName)
+                    if (ok) {
+                        typeToManage = null
+                        typeManageError = null
+                    } else {
+                        typeManageError = "重命名失败：类型名不能为空，或已存在同名类型"
+                    }
+                }
+            },
+            onDelete = {
+                scope.launch {
+                    val ok = viewModel.deleteBookType(type.id)
+                    if (ok) {
+                        typeToManage = null
+                        typeManageError = null
+                    } else {
+                        typeManageError = "删除失败：至少需要保留一个书籍类型"
+                    }
                 }
             }
         )
@@ -1228,6 +1292,189 @@ private fun CreateBookTypeDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("取消")
+            }
+        }
+    )
+}
+
+/**
+ * 书籍类型块。「新建类型」按钮也复用本组件，
+ * 保证与类型项共享同一套高度、内边距与字体规格，视觉上严格齐平。
+ *
+ * 用 Surface + 手势宿主而非 FilterChip 外裹手势：
+ * FilterChip 自带点击处理，叠加长按检测器后松手可能同时触发选中，
+ * 出现「弹框的同时误改了书籍类型」的事件冲突。单一手势宿主可避免。
+ *
+ * @param onLongClick 为 null 时只响应点击（如「新建类型」按钮）
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BookTypeChip(
+    text: String,
+    containerColor: Color,
+    labelColor: Color,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
+) {
+    val gestureModifier = if (onLongClick != null) {
+        Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    } else {
+        Modifier.clickable(onClick = onClick)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor,
+        modifier = gestureModifier
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = labelColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
+        )
+    }
+}
+
+private enum class BookTypeManageMode { MANAGE, RENAME, CONFIRM_DELETE }
+
+/**
+ * 长按书籍类型后的管理框：重命名或删除。
+ *
+ * 重命名会同步所有已使用该类型的书籍（由仓库层在同一事务内完成 reassignBooks）；
+ * 删除会把关联书籍归入剩余类型，因此作为破坏性操作需要二次确认。
+ *
+ * @param affectedCount 受影响的书籍数；null 表示仍在统计，此时不展示数字以免误导删除决策
+ */
+@Composable
+private fun BookTypeManageDialog(
+    type: BookTypeEntity,
+    affectedCount: Int?,
+    isLastType: Boolean,
+    existingNames: List<String>,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var mode by remember(type.id) { mutableStateOf(BookTypeManageMode.MANAGE) }
+    var newName by remember(type.id) { mutableStateOf(type.name) }
+
+    val trimmed = newName.trim()
+    val isDuplicate = trimmed.isNotEmpty() && trimmed != type.name &&
+        existingNames.any { it == trimmed }
+
+    val affectedText = when {
+        affectedCount == null -> "正在统计使用该类型的书籍…"
+        affectedCount == 0 -> "当前没有书籍使用该类型。"
+        else -> "有 $affectedCount 本书正在使用该类型。"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("管理书籍类型", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text(
+                    "「${type.name}」",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    affectedText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                when (mode) {
+                    BookTypeManageMode.RENAME -> {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("新的类型名称") },
+                            singleLine = true,
+                            isError = isDuplicate,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (isDuplicate) {
+                            Text(
+                                "该类型已存在",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                        } else {
+                            Text(
+                                "改名后，已使用该类型的书籍会同步更新",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                        }
+                    }
+                    BookTypeManageMode.CONFIRM_DELETE -> {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            when {
+                                isLastType -> "至少需要保留一个书籍类型，无法删除。"
+                                (affectedCount ?: 0) > 0 ->
+                                    "删除后，这 $affectedCount 本书将自动归入剩余的第一个类型。"
+                                else -> "确定要删除该类型吗？"
+                            },
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    BookTypeManageMode.MANAGE -> Unit
+                }
+
+                errorMessage?.let { message ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            when (mode) {
+                BookTypeManageMode.RENAME -> {
+                    TextButton(
+                        onClick = { onRename(trimmed) },
+                        enabled = trimmed.isNotEmpty() && trimmed != type.name && !isDuplicate
+                    ) { Text("保存") }
+                }
+                BookTypeManageMode.CONFIRM_DELETE -> {
+                    TextButton(onClick = onDelete, enabled = !isLastType) {
+                        Text("确认删除", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                BookTypeManageMode.MANAGE -> {
+                    TextButton(onClick = { mode = BookTypeManageMode.CONFIRM_DELETE }) {
+                        Text("删除类型", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            when (mode) {
+                BookTypeManageMode.MANAGE -> {
+                    TextButton(onClick = { mode = BookTypeManageMode.RENAME }) {
+                        Text("重命名")
+                    }
+                }
+                BookTypeManageMode.RENAME -> {
+                    TextButton(onClick = { mode = BookTypeManageMode.MANAGE }) { Text("返回") }
+                }
+                BookTypeManageMode.CONFIRM_DELETE -> {
+                    TextButton(onClick = { mode = BookTypeManageMode.MANAGE }) { Text("取消") }
+                }
             }
         }
     )

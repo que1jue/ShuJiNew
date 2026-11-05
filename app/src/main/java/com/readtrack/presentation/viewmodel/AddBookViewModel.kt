@@ -222,6 +222,54 @@ class AddBookViewModel @Inject constructor(
         return trimmed
     }
 
+    /**
+     * 重命名书籍类型。
+     * 所有已使用该类型的书籍会同步改名（由仓库层在同一事务内完成 reassignBooks）。
+     * 若改的正是当前选中的类型，选中值一并跟随，否则保存时会写回已不存在的旧名。
+     *
+     * @return true 表示成功；false 表示名称为空、类型不存在或与其他类型重名
+     */
+    suspend fun renameBookType(id: Long, newName: String): Boolean {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return false
+
+        val target = _uiState.value.allBookTypes.firstOrNull { it.id == id } ?: return false
+        if (!bookTypeRepository.renameBookType(id, trimmed)) return false
+
+        if (_uiState.value.bookType == target.name) {
+            _uiState.update { state -> state.copy(bookType = trimmed) }
+        }
+        return true
+    }
+
+    /**
+     * 删除书籍类型。引用该类型的书籍会归入剩余类型（仓库层回退到最早创建的那个）。
+     * 仅剩一个类型时不允许删除。
+     *
+     * @return true 表示删除成功；false 表示类型不存在或为最后一个类型
+     */
+    suspend fun deleteBookType(id: Long): Boolean {
+        val target = _uiState.value.allBookTypes.firstOrNull { it.id == id } ?: return false
+        val wasSelected = _uiState.value.bookType == target.name
+
+        if (!bookTypeRepository.deleteBookType(id)) return false
+
+        if (wasSelected) {
+            // 删掉的是当前书籍正在用的类型，改选剩余的第一项。
+            // 重新查库而非本地推算，保证与仓库层的回退规则一致；
+            // 若不改，保存时会把已删除的类型名写回书籍。
+            val remaining = bookTypeRepository.getAllBookTypesOnce()
+            _uiState.update { state ->
+                state.copy(bookType = remaining.firstOrNull()?.name ?: BookTypes.DEFAULT)
+            }
+        }
+        return true
+    }
+
+    /** 统计使用某类型的书籍数量，用于删除前提示影响范围 */
+    suspend fun countBooksWithType(name: String): Int =
+        bookTypeRepository.countBooksWithType(name)
+
     fun showSearchDialog() {
         searchJob?.cancel()
         lastSearchQuery = ""
